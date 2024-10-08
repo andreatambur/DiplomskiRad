@@ -17,6 +17,15 @@ data$Urine.protein<-as.factor(data$Urine.protein)
 data$dental.caries<-as.factor(data$dental.caries)
 data$smoking<-as.factor(data$smoking)
 
+# sto se tice varijable urine protein vidimo da najveci postotak rezultata vezuje za vrednost 1
+# dok je manji broj rasporedjen na ostalih 5 vrednosti, te cemo ostalih 5 grupisati u jednu celinu
+# promenicemo naziv druge vrednosti u 2+ kako bi oznacavala i prinacene vrednosti, nakon cega cemo odstraniti
+# vrednosti varijable koje nam vise nisu potrebne
+table(data$Urine.protein)
+data$Urine.protein[data$Urine.protein=='3'|data$Urine.protein=='4'|data$Urine.protein=='5'|data$Urine.protein=='6']=2
+levels(data$Urine.protein)[levels(data$Urine.protein) == "2"] <- "2+"
+data$Urine.protein <- droplevels(data$Urine.protein)
+
 # sledi ispitivanje znacajnosti varijabli koriscenjem plotova
 library(ggplot2)
 # numericke varijable
