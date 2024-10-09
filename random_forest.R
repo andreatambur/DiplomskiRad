@@ -107,14 +107,51 @@ eval.rf2
 # Accuracy Precision    Recall        F1 
 # 0.7234479 0.6096124 0.6866923 0.6458607 
 
-# uporedjivanje rezultata modela i tumacenje
-data.frame(rbind(eval.rf1,eval.rf2), row.names = c("Prvi model","Drugi model"))
+# KREIRANJE TRECEG MODELA
 
-#              Accuracy  Precision  Recall       F1
+m<- sqrt(ncol(data))
+grid <- expand.grid(mtry = c(m-2,m-1,m,m+1,m+2))
+
+train_control <- trainControl(method = "cv",
+                              number = 5,
+                              classProbs = TRUE,
+                              summaryFunction = twoClassSummary)
+
+model_rf <- train(x = trainDataSubSet[,-16], y = trainDataSubSet$smoking, method = "rf", metric = "ROC",
+                  tuneGrid = grid, trControl = train_control)
+best_mtry <- model_rf$bestTune$mtry
+# best_mtry je 3
+model_rf$finalModel
+# Confusion matrix:
+#      No Yes class.error
+# No  525 103   0.1640127
+# Yes 141 231   0.3790323
+
+# kreiranje predikcije, matrice konfuzije i evalucionih metrika
+rf3 <- randomForest(smoking ~., data = trainDataSubSet, mtry = best_mtry) 
+rf3.pred <- predict(object = rf3, newdata = testData, type = "class")
+
+rf3.cm <- table(true = testData$smoking, predicted = rf3.pred)
+rf3.cm
+#        predicted
+# true    No  Yes
+# No    3905 1028
+# Yes   1154 1709
+eval.rf3 <- getEvaluationMetrics(rf3.cm)
+eval.rf3
+# Accuracy Precision    Recall        F1 
+# 0.7201129 0.6244063 0.5969263 0.6103571 
+
+
+# uporedjivanje rezultata modela i tumacenje
+data.frame(rbind(eval.rf1,eval.rf2,eval.rf3), row.names = c("Prvi model","Drugi model","Treci model"))
+
+#               Accuracy Precision    Recall        F1
 # Prvi model  0.7887378 0.7097999 0.7184771 0.7141121
 # Drugi model 0.7234479 0.6096124 0.6866923 0.6458607
+# Treci model 0.7201129 0.6244063 0.5969263 0.6103571
 
-# prvi model nad nebalansiranim podacima daje znatno bolje rezulate nego drugi, u pogledu svake metrike
+# prvi model nad nebalansiranim podacima daje znatno bolje rezulate nego drugi i treci, u pogledu svake metrike
 
 
 
