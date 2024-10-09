@@ -7,11 +7,16 @@ source("funkcija.R")
 
 # instaliranje paketa i ucitavanje biblioteka neophodnih za rad
 install.packages("bnlearn")
-# install.packages('caret')
+install.packages('caret')
+install.packages("naivebayes")
+#install.packages("pROC")
 library(caret)
 library(bnlearn)
 library(e1071)
 library(pROC)
+library(rpart)
+library(ROSE)
+library(naivebayes)
 
 str(data)
 
@@ -84,8 +89,8 @@ nb2.roc$auc
 # ako je 0.5 onda ne moze da razlikuje, to je najgora situacija
 # u nasem slucaju mi imamo 0.7727 sanse da razlikujemo pozitivnu od negativne klase
 
-plot.roc(nb2.roc, print.thres = TRUE, print.thres.best.method = "youden")
 
+plot.roc(nb2.roc, print.thres = TRUE, print.thres.best.method = "youden")
 nb2.coords <- coords(nb2.roc, ret = c("accuracy","spec","sens","threshold"),
                      x = "best",best.method = "youden")
 nb2.coords
@@ -111,12 +116,83 @@ eval.nb2
 # Accuracy Precision    Recall        F1 
 # 0.6791945 0.5388746 0.8763535 0.6673760 
 
+# KREIRANJE TRECEG MODELA
+
+# kreiranje modela koriscenjem balansiranog dataset-a
+trainData$smoking <- factor(trainData$smoking, levels = c(0, 1), labels = c("No", "Yes"))
+testData$smoking <- factor(testData$smoking, levels = c(0, 1),labels = c("No", "Yes"))
+grid <- expand.grid(laplace = 1, usekernel= FALSE, adjust = 1)
+
+# kreiranje kontrolnog modela koji koristi metod unakrsne krosvalidacije s ponavljanjem radi vece pouzdanosti
+ctrl <- trainControl(method = "repeatedcv", repeats = 5,
+                     classProbs = TRUE,
+                     summaryFunction = twoClassSummary,
+                     sampling = "down")
+# downSample
+set.seed(1010)
+down_inside <- train(x = trainData[,-16], y = trainData$smoking, method = "naive_bayes",
+                     metric = "ROC", trControl = ctrl, tuneGrid = grid)
+
+
+# upSample
+ctrl$sampling <- "up"
+set.seed(1010)
+up_inside <- train(x = trainData[,-16], y = trainData$smoking, method = "naive_bayes",
+                   metric = "ROC", trControl = ctrl, tuneGrid = grid)
+
+# ROSE
+ctrl$sampling <- "rose"
+set.seed(1010)
+rose_inside <- train(x = trainData[,-16], y = trainData$smoking, method = "naive_bayes",
+                     metric = "ROC", trControl = ctrl, tyuneGrid = grid)
+
+# originalan model bez uzrokovanja
+ctrl$sampling <- NULL
+set.seed(1010)
+orig_fit <- train(x = trainData[,-16], y = trainData$smoking, method = "naive_bayes",
+                  metric = "ROC", trControl = ctrl,tuneGrid = grid)
+
+# pravimo listu sa svim modelima i uporedjujemo ih
+inside_models <- list(original = orig_fit,
+                      down = down_inside,
+                      up = up_inside,
+                      ROSE = rose_inside)
+inside_resampling <- resamples(inside_models)
+summary(inside_resampling, metric = "ROC")
+
+# ROC 
+#                Min.   1st Qu.    Median      Mean   3rd Qu.      Max. NA's
+# original 0.7665196 0.7774733 0.7833755 0.7826849 0.7881930 0.8026115    0
+# down     0.7646856 0.7777378 0.7835097 0.7826875 0.7868684 0.8000530    0
+# up       0.7666073 0.7776639 0.7834567 0.7826839 0.7881429 0.8021850    0
+# ROSE     0.7667060 0.7774130 0.7831071 0.7825914 0.7881833 0.8031720    0
+
+# svi modeli imaju skoro pa iste rezultate, uz sasvim zanemarljiva odstupanja jednog od drugog
+# koristicemo up_inside za treci model
+
+# kreiranje predikcije, matrice konfuzije i evalucionih metrika
+nb3.pred <- predict(up_inside$finalModel, newdata = testData, type = "class")
+
+nb3.cm <- table(true = testData$smoking, predicted = nb3.pred)
+nb3.cm
+#       predicted
+# true    No  Yes
+# No     3136 1797
+# Yes     617 2246
+
+eval.nb3 <- getEvaluationMetrics(nb3.cm)
+eval.nb3
+# Accuracy Precision    Recall        F1 
+# 0.6903540 0.5555281 0.7844918 0.6504489 
+
+
 # uporedjivanje rezultata modela i tumacenje
-data.frame(rbind(eval.nb1, eval.nb2), row.names = c("Prvi model","Drugi model"))
+data.frame(rbind(eval.nb1, eval.nb2, eval.nb3), row.names = c("Prvi model","Drugi model","Treci model"))
  
-#               Accuracy Precision  Recall   F1
+#              Accuracy Precision    Recall        F1
 # Prvi model  0.6947152 0.5649368 0.7338456 0.6384078
 # Drugi model 0.6791945 0.5388746 0.8763535 0.6673760
+# Treci model 0.6903540 0.5555281 0.7844918 0.6504489
 
 
 
