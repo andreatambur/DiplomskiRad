@@ -49,32 +49,31 @@ ctrl <- trainControl(method = "cv", repeats = 5,
                      classProbs = TRUE,
                      summaryFunction = twoClassSummary,
                      sampling = "down")
-# postupak krosvalidacije u kombinaciji sa random forest algoritmom i obimnim data setom, zahteva mnogo vremena za izvrsenje
-# te smo postupak realizovali nad podskupom podataka
-trainDataSubSet<-trainData[sample(nrow(trainData), 1000),]
+# postupak unakrsne krosvalidacije u kombinaciji sa random forest algoritmom i obimnim data setom, zahteva mnogo vremena za izvrsenje
+# te smo postupak realizovali obicnom krosvalidacijom i ogranicavanjem broja stabala na 100
 
 # downSample
 set.seed(1010)
-down_inside <- train(x = trainDataSubSet[,-16], y = trainDataSubSet$smoking, method = "rf",
+down_inside <- train(x = trainData[,-16], y = trainData$smoking, method = "rf", ntree=100,
                      metric = "ROC", trControl = ctrl)
 
 # upSample
 ctrl$sampling <- "up"
 set.seed(1010)
-up_inside <- train(x = trainDataSubSet[,-16], y = trainDataSubSet$smoking, method = "rf",
+up_inside <- train(x = trainData[,-16], y = trainData$smoking, method = "rf", ntree=100,
                    metric = "ROC", trControl = ctrl)
 
 # ROSE
 ctrl$sampling <- "rose"
 set.seed(1010)
-rose_inside <- train(x = trainDataSubSet[,-16], y = trainDataSubSet$smoking, method = "rf",
+rose_inside <- train(x = trainData[,-16], y = trainData$smoking, method = "rf", ntree=100,
                      metric = "ROC", trControl = ctrl)
 
 # originalan model bez uzrokovanja
 ctrl$sampling <- NULL
 set.seed(1010)
-orig_fit <- train(x = trainDataSubSet[,-16], y = trainDataSubSet$smoking, method = "rf",
-                   metric = "ROC", trControl = ctrl)
+orig_fit <- train(x = trainData[,-16], y = trainData$smoking, method = "rf", ntree=100,
+                  metric = "ROC", trControl = ctrl)
 
 # pravimo listu sa svim modelima i uporedjujemo ih
 inside_models <- list(original = orig_fit,
@@ -84,11 +83,11 @@ inside_models <- list(original = orig_fit,
 inside_resampling <- resamples(inside_models)
 summary(inside_resampling, metric = "ROC")
 # ROC 
-#                Min.   1st Qu.    Median      Mean   3rd Qu.      Max. NA's
-# original 0.7082797 0.8016098 0.8152479 0.8184686 0.8466016 0.9006864    0
-# down     0.7295152 0.7880738 0.8171386 0.8151070 0.8403540 0.9017589    0
-# up       0.7162162 0.7950450 0.8163257 0.8163674 0.8489218 0.9045474    0
-# ROSE     0.7012012 0.7739337 0.8068934 0.7999499 0.8286290 0.9062634    0
+#               Min.   1st Qu.    Median      Mean   3rd Qu.      Max. NA's
+# original 0.8642660 0.8689876 0.8690381 0.8700769 0.8715399 0.8765531    0
+# down     0.8539793 0.8572228 0.8581053 0.8592855 0.8597733 0.8673468    0
+# up       0.8666077 0.8687449 0.8701872 0.8711191 0.8703805 0.8796750    0
+# ROSE     0.8049510 0.8064405 0.8132547 0.8110880 0.8150062 0.8157874    0
 
 # najbolji je upSample
 
@@ -97,15 +96,14 @@ rf2.pred <- predict(up_inside$finalModel, newdata = testData, type = "class")
 
 rf2.cm <- table(true = testData$smoking, predicted = rf2.pred)
 rf2.cm
-#        predicted
-# true    No  Yes
-# No    3674 1259
-# Yes    897 1966
+#  true    No  Yes
+#   No    3932 1001
+#   Yes    706 2157
 
 eval.rf2 <- getEvaluationMetrics(rf2.cm)
 eval.rf2
 # Accuracy Precision    Recall        F1 
-# 0.7234479 0.6096124 0.6866923 0.6458607 
+# 0.7810416 0.6830272 0.7534055 0.7164923
 
 # KREIRANJE TRECEG MODELA
 
@@ -117,30 +115,30 @@ train_control <- trainControl(method = "cv",
                               classProbs = TRUE,
                               summaryFunction = twoClassSummary)
 
-model_rf <- train(x = trainDataSubSet[,-16], y = trainDataSubSet$smoking, method = "rf", metric = "ROC",
+model_rf <- train(x = trainData[,-16], y = trainData$smoking, method = "rf", metric = "ROC", ntree=100,
                   tuneGrid = grid, trControl = train_control)
 best_mtry <- model_rf$bestTune$mtry
 # best_mtry je 3
 model_rf$finalModel
 # Confusion matrix:
-#      No Yes class.error
-# No  525 103   0.1640127
-# Yes 141 231   0.3790323
+#         No Yes class.error
+# No  16553 3180   0.1611514
+# Yes  3232 8223   0.2821475
 
 # kreiranje predikcije, matrice konfuzije i evalucionih metrika
-rf3 <- randomForest(smoking ~., data = trainDataSubSet, mtry = best_mtry) 
+rf3 <- randomForest(smoking ~., data = trainData, mtry = best_mtry) 
 rf3.pred <- predict(object = rf3, newdata = testData, type = "class")
 
 rf3.cm <- table(true = testData$smoking, predicted = rf3.pred)
 rf3.cm
-#        predicted
+#       predicted
 # true    No  Yes
-# No    3905 1028
-# Yes   1154 1709
+#   No  4107  826
+#   Yes  810 2053
 eval.rf3 <- getEvaluationMetrics(rf3.cm)
 eval.rf3
 # Accuracy Precision    Recall        F1 
-# 0.7201129 0.6244063 0.5969263 0.6103571 
+# 0.7901488 0.7130948 0.7170800 0.7150819 
 
 
 # uporedjivanje rezultata modela i tumacenje
@@ -148,10 +146,35 @@ data.frame(rbind(eval.rf1,eval.rf2,eval.rf3), row.names = c("Prvi model","Drugi 
 
 #               Accuracy Precision    Recall        F1
 # Prvi model  0.7887378 0.7097999 0.7184771 0.7141121
-# Drugi model 0.7234479 0.6096124 0.6866923 0.6458607
-# Treci model 0.7201129 0.6244063 0.5969263 0.6103571
+# Drugi model 0.7810416 0.6830272 0.7534055 0.7164923
+# Treci model 0.7901488 0.7130948 0.7170800 0.7150819
 
-# prvi model nad nebalansiranim podacima daje znatno bolje rezulate nego drugi i treci, u pogledu svake metrike
+# treci model daje nam najbolje rezultate poredjenjem rezultata svakog modela
+
+# znacajnost varijabli za treci model
+
+png("varImpRF.png", width = 1200, height = 800, res = 150)
+randomForest::varImpPlot(rf3, main="Variable Importance Plot")
+dev.off()
+
+varImp(rf3) |> as.data.frame() |> dplyr::arrange(desc(Overall))
+#                     Overall
+# hemoglobin       2070.42227
+# Gtp              1872.88847
+# height.cm.       1618.94376
+# triglyceride     1478.80056
+# waist.cm.        1186.92997
+# HDL              1161.83485
+# systolic         1066.69697
+# relaxation       1001.27423
+# serum.creatinine  861.65400
+# weight.kg.        855.35450
+# age               831.29556
+# dental.caries     154.35040
+# Urine.protein      85.98348
+# hearing.right.     39.25982
+# hearing.left.      37.21894
+
 
 
 
